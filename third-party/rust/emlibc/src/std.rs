@@ -1,23 +1,25 @@
 /*
-   Для реализации аналогов макросов println и т.п. за основу взят код из:
-   https://github.com/mmastrac/rust-libc-print
- */
+  Для реализации аналогов макросов println и т.п. за основу взят код из:
+  https://github.com/mmastrac/rust-libc-print
+*/
 #![no_std]
 
-pub use super::libc_dbg as dbg;
-pub use super::libc_eprint as eprint;
-pub use super::libc_eprintln as eprintln;
-pub use super::libc_print as print;
-pub use super::libc_println as println;
+use crate::fd_set;
+pub use crate::libc_dbg as dbg;
+pub use crate::libc_eprint as eprint;
+pub use crate::libc_eprintln as eprintln;
+pub use crate::libc_print as print;
+pub use crate::libc_println as println;
 
-use core::{alloc::{GlobalAlloc, Layout},
-             ffi::c_void,
-             convert::TryFrom,
-             file,
-             line,
-             stringify};
+use core::{
+    alloc::{GlobalAlloc, Layout},
+    convert::TryFrom,
+    ffi::c_void,
+    ffi::c_int,
+    file, line, stringify,
+};
 
-use super::{memcmp, malloc, free, write};
+use crate::{free, malloc, memcmp, write};
 
 #[doc(hidden)]
 pub const __LIBC_NEWLINE: &str = "\n";
@@ -49,14 +51,12 @@ fn default_handler(layout: Layout) -> ! {
 }
 
 #[no_mangle]
-pub extern  "C" fn bcmp(
+pub extern "C" fn bcmp(
     ptr1: *const core::ffi::c_void,
     ptr2: *const core::ffi::c_void,
     n: core::ffi::c_ulong,
 ) -> core::ffi::c_int {
-    unsafe {
-        memcmp(ptr1, ptr2, n)
-    }
+    unsafe { memcmp(ptr1, ptr2, n) }
 }
 
 #[doc(hidden)]
@@ -118,7 +118,6 @@ unsafe fn libc_write(handle: i32, bytes: &[u8]) -> Option<usize> {
     })
     .ok()
 }
-
 
 /// Macro for printing to the standard output, with a newline.
 ///
@@ -296,10 +295,36 @@ macro_rules! libc_dbg {
     };
 }
 
+pub unsafe fn FD_CLR(fd: c_int, set: *mut fd_set) -> () {
+    let fd = fd as usize;
+    let size = core::mem::size_of_val(&(*set).fds_bits[0]) * 8;
+    (*set).fds_bits[fd / size] &= !(1 << (fd % size));
+    return;
+}
+
+pub unsafe fn FD_ISSET(fd: c_int, set: *const fd_set) -> bool {
+    let fd = fd as usize;
+    let size = core::mem::size_of_val(&(*set).fds_bits[0]) * 8;
+    return ((*set).fds_bits[fd / size] & (1 << (fd % size))) != 0;
+}
+
+pub unsafe fn FD_SET(fd: c_int, set: *mut fd_set) -> () {
+    let fd = fd as usize;
+    let size = core::mem::size_of_val(&(*set).fds_bits[0]) * 8;
+    (*set).fds_bits[fd / size] |= 1 << (fd % size);
+    return;
+}
+
+pub unsafe fn FD_ZERO(set: *mut fd_set) -> () {
+    for slot in (*set).fds_bits.iter_mut() {
+        *slot = 0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{eprintln, println};
-    
+
     #[test]
     fn test_stdout() {
         crate::libc_println!("stdout fd = {}", crate::std::__LIBC_STDOUT);
